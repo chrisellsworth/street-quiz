@@ -408,46 +408,89 @@ function matchQuality(guess,osmName) {
 }
 
 // ── Street label rendering ──────────────────────────────────
-const streetLabels = {}; // key -> L.marker with divIcon label
+const streetLabels = {}; // key -> [L.marker, ...]
+const LABEL_SPACING_PX = 300; // minimum pixels between repeated labels
+
+function makeLabel(latlng, angle, osmName, color) {
+  const icon = L.divIcon({
+    className: '',
+    html: '<div style="position:absolute;transform:translate(-50%,-50%) rotate(' + angle + 'deg);white-space:nowrap;font-family:DM Mono,monospace;font-size:10px;font-weight:500;color:' + color + ';text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:none;">' + osmName + '</div>',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+  return L.marker(latlng, {icon, interactive:false, zIndexOffset:500});
+}
+
+function angleForSegment(pts2d) {
+  const pA = pts2d[0], pB = pts2d[pts2d.length - 1];
+  let angle = Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180 / Math.PI;
+  if (angle > 90)  angle -= 180;
+  if (angle < -90) angle += 180;
+  return angle;
+}
 
 function renderStreetLabel(key) {
   const street = streetLayers[key];
   if (!street || !street.layers.length) return;
-  // Remove old label if exists
-  if (streetLabels[key]) { map.removeLayer(streetLabels[key]); delete streetLabels[key]; }
 
-  // Find midpoint of the longest segment
-  let longest = null, longestLen = 0;
-  for (const layer of street.layers) {
-    const pts = layer.getLatLngs();
-    if (pts.length >= 2) {
-      let len = 0;
-      for (let i=1;i<pts.length;i++) len += pts[i-1].distanceTo(pts[i]);
-      if (len > longestLen) { longestLen = len; longest = pts; }
-    }
+  // Remove existing labels
+  if (streetLabels[key]) {
+    streetLabels[key].forEach(m => map.removeLayer(m));
+    delete streetLabels[key];
   }
-  if (!longest) return;
-  const mid = longest[Math.floor(longest.length/2)];
-
-  // Project first and last points to screen pixels for a clean unambiguous angle
-  const pts2d = longest.map(p => map.latLngToContainerPoint(p));
-  const pA = pts2d[0], pB = pts2d[pts2d.length - 1];
-  const dx = pB.x - pA.x, dy = pB.y - pA.y;
-  // CSS rotate() is clockwise; screen y increases downward
-  let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-  // Flip so text is never upside-down
-  if (angle > 90)  angle -= 180;
-  if (angle < -90) angle += 180;
 
   const color = street.state === 'correct' ? '#7eb8a0' : '#c0604a';
-  const icon = L.divIcon({
-    className: '',
-    html: '<div style="position:absolute;transform:translate(-50%,-50%) rotate(' + angle + 'deg);white-space:nowrap;font-family:DM Mono,monospace;font-size:10px;font-weight:500;color:' + color + ';text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:none;">' + street.osmName + '</div>',
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-  streetLabels[key] = L.marker(mid, {icon, interactive:false, zIndexOffset:500}).addTo(map);
+  const markers = [];
+
+  for (const layer of street.layers) {
+    const pts = layer.getLatLngs();
+    if (pts.length < 2) continue;
+
+    const pts2d = pts.map(p => map.latLngToContainerPoint(p));
+    const angle = angleForSegment(pts2d);
+
+    // Walk along the segment in screen-pixel distance, placing a label every LABEL_SPACING_PX
+    let distSinceLast = LABEL_SPACING_PX / 2; // start at half-spacing so first label is near start
+    for (let i = 1; i < pts2d.length; i++) {
+      const ax = pts2d[i-1].x, ay = pts2d[i-1].y;
+      const bx = pts2d[i].x,   by = pts2d[i].y;
+      const segLen = Math.hypot(bx - ax, by - ay);
+      let remaining = segLen;
+      let t = 0;
+      while (remaining > 0) {
+        const needed = LABEL_SPACING_PX - distSinceLast;
+        if (needed <= remaining) {
+          t += needed / segLen;
+          const latlng = L.latLng(
+            pts[i-1].lat + t * (pts[i].lat - pts[i-1].lat),
+            pts[i-1].lng + t * (pts[i].lng - pts[i-1].lng),
+          );
+          markers.push(makeLabel(latlng, angle, street.osmName, color).addTo(map));
+          distSinceLast = 0;
+          remaining -= needed;
+        } else {
+          distSinceLast += remaining;
+          remaining = 0;
+        }
+      }
+    }
+
+    // If the whole segment was shorter than half-spacing, place one label at midpoint
+    if (markers.length === 0) {
+      const mid = pts[Math.floor(pts.length / 2)];
+      markers.push(makeLabel(mid, angle, street.osmName, color).addTo(map));
+    }
+  }
+
+  streetLabels[key] = markers;
 }
+
+// Re-render all labels on zoom so spacing/angle stays correct
+map.on('zoomend', () => {
+  for (const key of Object.keys(streetLabels)) {
+    renderStreetLabel(key);
+  }
+});
 
 function discloseStreet(key) {
   const street=streetLayers[key];
@@ -559,7 +602,7 @@ function onClearMouseUp(ev) {
     if (inside) {
       street.state = 'unknown';
       street.layers.forEach(l => l.setStyle(COLORS.unknown));
-      if (streetLabels[key]) { map.removeLayer(streetLabels[key]); delete streetLabels[key]; }
+      if (streetLabels[key]) { streetLabels[key].forEach(m => map.removeLayer(m)); delete streetLabels[key]; }
       count++;
     }
   }
@@ -580,7 +623,7 @@ function resetStreet(key) {
   if (!street || street.state === 'unknown') return;
   street.state = 'unknown';
   street.layers.forEach(l => l.setStyle(COLORS.unknown));
-  if (streetLabels[key]) { map.removeLayer(streetLabels[key]); delete streetLabels[key]; }
+  if (streetLabels[key]) { streetLabels[key].forEach(m => map.removeLayer(m)); delete streetLabels[key]; }
   if (activePopup) { map.closePopup(activePopup); activePopup = null; }
   updateStats();
   triggerAutoSave();
@@ -598,7 +641,7 @@ function clearAll() {
   for(const {layers} of Object.values(streetLayers)) layers.forEach(l=>map.removeLayer(l));
   for(const l of Object.values(fogLayers)) map.removeLayer(l);
   for(const l of Object.values(loadingTiles)) map.removeLayer(l);
-  for(const l of Object.values(streetLabels)) map.removeLayer(l);
+  for(const markers of Object.values(streetLabels)) markers.forEach(m => map.removeLayer(m));
   Object.keys(streetLabels).forEach(k=>delete streetLabels[k]);
   streetLayers={}; loadedTiles=new Set(); fogLayers={}; loadingTiles={};
   if(activePopup){map.closePopup(activePopup);activePopup=null;}
@@ -609,7 +652,7 @@ function clearAll() {
 
 function resetAnswers() {
   for(const s of Object.values(streetLayers)){s.state='unknown';s.layers.forEach(l=>l.setStyle(COLORS.unknown));}
-  for(const l of Object.values(streetLabels)) map.removeLayer(l);
+  for(const markers of Object.values(streetLabels)) markers.forEach(m => map.removeLayer(m));
   Object.keys(streetLabels).forEach(k=>delete streetLabels[k]);
   document.getElementById('statCorrect').textContent='0';
   document.getElementById('statWrong').textContent='0';
