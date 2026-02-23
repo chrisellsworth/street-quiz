@@ -14,7 +14,7 @@
     --accent:#e8d5a3; --accent2:#7eb8a0; --wrong:#c0604a;
     --text:#e0d8cc; --muted:#666;
   }
-  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
 
   header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; }
   .title { font-family:'Playfair Display',serif; font-size:1.3rem; color:var(--accent); }
@@ -35,7 +35,7 @@
   .leaflet-control-attribution { display:none; }
   .leaflet-control-zoom a { background:var(--panel) !important; color:var(--accent) !important; border-color:var(--border) !important; }
 
-  /* Side panel */
+  /* Side panel — desktop */
   .side-panel {
     width:260px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
     display:flex; flex-direction:column; z-index:100; overflow:hidden;
@@ -57,6 +57,37 @@
   .action-btn:hover { background:#333; }
   .action-btn.primary { background:var(--accent); color:#0f0f0f; font-weight:500; }
   .action-btn.primary:hover { opacity:0.85; }
+
+  /* ── Mobile: bottom drawer ── */
+  @media (max-width: 600px) {
+    header { flex-wrap:wrap; gap:6px; padding:8px 12px; }
+    .city-form input { width:130px; }
+    .stats { font-size:0.7rem; gap:12px; }
+
+    .game-area { flex-direction:column; }
+
+    /* Drawer sits at the bottom, map fills the rest */
+    .side-panel {
+      width:100%; border-left:none; border-top:1px solid var(--border);
+      flex-direction:column; max-height:44dvh;
+      /* Drag handle visual */
+      border-radius:12px 12px 0 0;
+    }
+    .side-panel::before {
+      content:'';
+      display:block;
+      width:36px; height:4px;
+      background:var(--border);
+      border-radius:2px;
+      margin:8px auto 0;
+      flex-shrink:0;
+    }
+    .target-area { padding:12px 14px; }
+    .target-name { font-size:1.15rem; margin-bottom:10px; min-height:unset; }
+    .target-actions { flex-direction:row; flex-wrap:wrap; }
+    .action-btn { flex:1; min-width:0; padding:10px 8px; font-size:0.72rem; text-align:center; }
+    .history { max-height:90px; }
+  }
 
   /* Result flash */
   .result-flash {
@@ -105,7 +136,7 @@
 <header>
   <div style="display:flex;align-items:center;gap:16px;">
     <div class="title">Street Finder</div>
-    <a href="street-quiz.html" class="game-link">→ Name It mode</a>
+    <a href="street-quiz.html" class="game-link" style="display:none;" id="gameLink">→ Name It mode</a>
   </div>
   <div class="city-form">
     <input type="text" id="cityInput" placeholder="City, Country"/>
@@ -148,13 +179,15 @@
 const TILE_DEG   = 0.06;
 const ROAD_TYPES = 'primary|secondary|tertiary|residential|living_street|pedestrian|unclassified';
 
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const W = IS_TOUCH ? 6 : 3; // heavier lines on touch for easier tapping
 const COLORS = {
-  unknown:  { color:'#333', weight:3, opacity:0.6 },
-  hover:    { color:'#a09070', weight:5, opacity:1 },
-  correct:  { color:'#7eb8a0', weight:5, opacity:1 },
-  wrong:    { color:'#c0604a', weight:5, opacity:1 },
-  skipped:  { color:'#444',   weight:3, opacity:0.5 },
-  hint:     { color:'#7070c0', weight:5, opacity:0.8 },
+  unknown:  { color:'#333', weight:W,   opacity:0.6 },
+  hover:    { color:'#a09070', weight:W+2, opacity:1 },
+  correct:  { color:'#7eb8a0', weight:W+2, opacity:1 },
+  wrong:    { color:'#c0604a', weight:W+2, opacity:1 },
+  skipped:  { color:'#444',   weight:W,   opacity:0.5 },
+  hint:     { color:'#7070c0', weight:W+2, opacity:0.8 },
 };
 
 // ═══════════════════════════════════════════════════════════

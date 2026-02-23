@@ -10,8 +10,16 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   :root { --bg:#0f0f0f; --panel:#1a1a1a; --border:#2a2a2a; --accent:#e8d5a3; --accent2:#7eb8a0; --wrong:#c0604a; --text:#e0d8cc; --muted:#666; }
-  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; }
+  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; flex-wrap:wrap; gap:8px; }
+  @media (max-width:600px) {
+    header { padding:8px 12px; gap:6px; }
+    .city-form input { width:120px; }
+    .city-form button, .btn { padding:6px 10px; font-size:0.72rem; }
+    .stats { font-size:0.7rem; gap:10px; }
+    /* Hide less important buttons on small screens */
+    #clearAreaBtn { display:none; }
+  }
   .title { font-family:'Playfair Display',serif; font-size:1.3rem; color:var(--accent); }
   .city-form { display:flex; gap:8px; align-items:center; }
   .city-form input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 12px; font-family:'DM Mono',monospace; font-size:0.8rem; border-radius:3px; width:180px; outline:none; }
@@ -94,11 +102,13 @@
 // ── Config ──────────────────────────────────────────────────
 const TILE_DEG = 0.06; // ~6km per tile
 const ROAD_TYPES = 'primary|secondary|tertiary|residential|living_street|pedestrian|unclassified';
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const W = IS_TOUCH ? 7 : 4;
 const COLORS = {
-  unknown: { color:'#444', weight:4, opacity:0.75 },
-  hover:   { color:'#a09070', weight:5, opacity:1 },
-  correct: { color:'#7eb8a0', weight:5, opacity:1 },
-  wrong:   { color:'#c0604a', weight:5, opacity:1 },
+  unknown: { color:'#444', weight:W,   opacity:0.75 },
+  hover:   { color:'#a09070', weight:W+1, opacity:1 },
+  correct: { color:'#7eb8a0', weight:W+1, opacity:1 },
+  wrong:   { color:'#c0604a', weight:W+1, opacity:1 },
 };
 
 // ── State ───────────────────────────────────────────────────
@@ -300,6 +310,13 @@ async function loadTile(tx, ty) {
     layer.on('mouseout',  ()=>{ if(streetLayers[sk].state==='unknown') streetLayers[sk].layers.forEach(l=>l.setStyle(COLORS.unknown)); });
     layer.on('click', ev=>openPopup(sk, ev.latlng));
     layer.on('contextmenu', ev=>{ L.DomEvent.stop(ev); resetStreet(sk); });
+    // Long-press to reset on touch devices
+    if (IS_TOUCH) {
+      let longPressTimer = null;
+      layer.on('mousedown', () => { longPressTimer = setTimeout(() => resetStreet(sk), 600); });
+      layer.on('mouseup',   () => clearTimeout(longPressTimer));
+      layer.on('mousemove', () => clearTimeout(longPressTimer));
+    }
     layer.addTo(map);
   }
 
