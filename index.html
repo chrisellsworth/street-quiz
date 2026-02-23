@@ -3,833 +3,221 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Street Name Quiz</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<title>Street Games</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  :root { --bg:#0f0f0f; --panel:#1a1a1a; --border:#2a2a2a; --accent:#e8d5a3; --accent2:#7eb8a0; --wrong:#c0604a; --text:#e0d8cc; --muted:#666; }
-  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; }
-  .title { font-family:'Playfair Display',serif; font-size:1.3rem; color:var(--accent); }
-  .city-form { display:flex; gap:8px; align-items:center; }
-  .city-form input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 12px; font-family:'DM Mono',monospace; font-size:0.8rem; border-radius:3px; width:180px; outline:none; }
-  .city-form input:focus { border-color:var(--accent); }
-  .city-form button, .btn { background:var(--accent); color:#0f0f0f; border:none; padding:6px 14px; font-family:'DM Mono',monospace; font-size:0.8rem; font-weight:500; border-radius:3px; cursor:pointer; }
-  .stats { display:flex; gap:20px; align-items:center; font-size:0.75rem; color:var(--muted); }
-  .stat-val { color:var(--accent); font-weight:500; }
-  .stat-val.correct { color:var(--accent2); }
-  .stat-val.wrong { color:var(--wrong); }
-  #map { flex:1; background:#111; }
-  #map.clear-area-mode { cursor:crosshair !important; }
-  #map.clear-area-mode .leaflet-interactive { cursor:crosshair !important; }
-  .leaflet-tile-pane { filter:grayscale(1) brightness(0.25) contrast(1.4); }
-  .leaflet-control-attribution { display:none; }
-  .leaflet-control-zoom a { background:var(--panel) !important; color:var(--accent) !important; border-color:var(--border) !important; }
-  .leaflet-popup-content-wrapper { background:var(--panel); border:1px solid var(--border); border-radius:4px; box-shadow:0 8px 32px rgba(0,0,0,0.6); }
-  .leaflet-popup-tip { background:var(--panel); }
-  .leaflet-popup-content { margin:0; }
-  .leaflet-popup-close-button { color:var(--muted) !important; top:8px !important; right:8px !important; }
-  .popup-inner { padding:14px 16px; min-width:220px; }
-  .popup-label { font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; }
-  .popup-input-row { display:flex; gap:6px; }
-  .popup-input { flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:7px 10px; font-family:'DM Mono',monospace; font-size:0.85rem; border-radius:3px; outline:none; }
-  .popup-input:focus { border-color:var(--accent); }
-  .popup-input[type=search]::-webkit-search-decoration,
-  .popup-input[type=search]::-webkit-search-cancel-button { display:none; }
-  .popup-submit { background:var(--accent); color:#0f0f0f; border:none; padding:7px 12px; font-family:'DM Mono',monospace; font-size:0.8rem; border-radius:3px; cursor:pointer; font-weight:500; }
-  .popup-result { margin-top:8px; font-size:0.8rem; padding:6px 8px; border-radius:3px; }
-  .popup-result.correct { background:rgba(126,184,160,0.15); color:var(--accent2); border:1px solid rgba(126,184,160,0.3); }
-  .popup-result.close { background:rgba(232,213,163,0.12); color:var(--accent); border:1px solid rgba(232,213,163,0.3); }
-  .popup-result.wrong { background:rgba(192,96,74,0.15); color:var(--wrong); border:1px solid rgba(192,96,74,0.3); }
-  #loading { position:absolute; inset:0; background:rgba(15,15,15,0.88); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2000; gap:16px; }
-  #loading.hidden { display:none; }
-  .spinner { width:36px; height:36px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  .loading-text { font-size:0.8rem; color:var(--muted); }
-  .toast { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); background:var(--panel); border:1px solid var(--border); padding:10px 18px; border-radius:4px; font-size:0.8rem; color:var(--muted); z-index:3000; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; }
-  .toast.show { opacity:1; }
-  .legend { position:absolute; bottom:24px; right:16px; background:var(--panel); border:1px solid var(--border); padding:10px 14px; border-radius:4px; z-index:1000; font-size:0.72rem; color:var(--muted); line-height:1.8; }
-  .legend-dot { display:inline-block; width:10px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle; }
-  .fog-hint { position:absolute; bottom:74px; left:50%; transform:translateX(-50%); background:rgba(26,26,26,0.92); border:1px solid var(--border); padding:8px 16px; border-radius:4px; font-size:0.72rem; color:var(--muted); z-index:1000; pointer-events:none; white-space:nowrap; opacity:0; transition:opacity 0.5s; }
-  .fog-hint.show { opacity:1; }
+  :root {
+    --bg:#0f0f0f; --panel:#1a1a1a; --border:#2a2a2a;
+    --accent:#e8d5a3; --accent2:#7eb8a0; --wrong:#c0604a;
+    --text:#e0d8cc; --muted:#555;
+  }
+
+  body {
+    font-family:'DM Mono',monospace;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:40px 20px;
+    /* subtle grid pattern */
+    background-image:
+      linear-gradient(rgba(232,213,163,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,213,163,0.03) 1px, transparent 1px);
+    background-size:48px 48px;
+  }
+
+  .container {
+    width:100%;
+    max-width:560px;
+  }
+
+  /* Header */
+  .eyebrow {
+    font-size:0.65rem;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.2em;
+    margin-bottom:12px;
+  }
+
+  h1 {
+    font-family:'Playfair Display',serif;
+    font-size:clamp(2.4rem,6vw,3.4rem);
+    font-weight:900;
+    color:var(--accent);
+    line-height:1;
+    margin-bottom:8px;
+  }
+
+  .subtitle {
+    font-size:0.78rem;
+    color:var(--muted);
+    margin-bottom:48px;
+    font-style:italic;
+  }
+
+  /* Game cards */
+  .cards {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+
+  .card {
+    display:block;
+    text-decoration:none;
+    background:var(--panel);
+    border:1px solid var(--border);
+    padding:24px 28px;
+    position:relative;
+    overflow:hidden;
+    transition:border-color 0.2s, background 0.2s;
+    cursor:pointer;
+  }
+
+  .card:first-child { border-radius:4px 4px 0 0; }
+  .card:last-child  { border-radius:0 0 4px 4px; }
+
+  .card::before {
+    content:'';
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:3px;
+    background:var(--accent);
+    opacity:0;
+    transition:opacity 0.2s;
+  }
+
+  .card:hover { border-color:#3a3a3a; background:#1e1e1e; }
+  .card:hover::before { opacity:1; }
+  .card:hover .card-arrow { transform:translateX(4px); color:var(--accent); }
+
+  .card-number {
+    font-size:0.6rem;
+    color:var(--muted);
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+
+  .card-title {
+    font-family:'Playfair Display',serif;
+    font-size:1.5rem;
+    color:var(--accent);
+    margin-bottom:6px;
+  }
+
+  .card-desc {
+    font-size:0.75rem;
+    color:var(--muted);
+    line-height:1.7;
+    margin-bottom:16px;
+  }
+
+  .card-tags {
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+
+  .tag {
+    font-size:0.62rem;
+    color:var(--muted);
+    border:1px solid var(--border);
+    padding:2px 8px;
+    border-radius:2px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+  }
+
+  .card-arrow {
+    position:absolute;
+    right:24px;
+    top:50%;
+    transform:translateY(-50%);
+    font-size:1.1rem;
+    color:var(--border);
+    transition:transform 0.2s, color 0.2s;
+  }
+
+  /* Divider between cards */
+  .card + .card {
+    border-top:none;
+  }
+
+  /* Footer */
+  footer {
+    margin-top:32px;
+    font-size:0.65rem;
+    color:var(--muted);
+    text-align:center;
+    line-height:1.8;
+  }
+
+  footer span { color:#333; }
+
+  /* Stagger-in animation */
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(16px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  .eyebrow  { animation:fadeUp 0.4s ease both; animation-delay:0.0s; }
+  h1        { animation:fadeUp 0.4s ease both; animation-delay:0.07s; }
+  .subtitle { animation:fadeUp 0.4s ease both; animation-delay:0.14s; }
+  .cards    { animation:fadeUp 0.4s ease both; animation-delay:0.22s; }
+  footer    { animation:fadeUp 0.4s ease both; animation-delay:0.30s; }
 </style>
 </head>
 <body>
-<header>
-  <div class="title">Street Quiz</div>
-  <div class="city-form">
-    <input type="text" id="cityInput" placeholder="City, Country" placeholder="City, Country"/>
-    <button onclick="loadCity()">Load</button>
-    <button class="btn" onclick="resetAnswers()" style="background:var(--border);color:var(--text);">Reset</button>
-    <button class="btn" id="clearAreaBtn" onclick="toggleClearArea()" style="background:var(--border);color:var(--muted);" title="Draw a box to clear answers in that area">Clear Area</button>
-    <button class="btn" onclick="exportSave()" style="background:var(--border);color:var(--text);" title="Export save file">Export ↓</button>
-    <button class="btn" onclick="document.getElementById('importFile').click()" style="background:var(--border);color:var(--text);" title="Import save file">Import ↑</button>
-    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSave(event)"/>
+<div class="container">
+
+  <div class="eyebrow">Street Games</div>
+  <h1>Know Your City</h1>
+  <p class="subtitle">Two ways to test your street knowledge.</p>
+
+  <div class="cards">
+
+    <a class="card" href="street-quiz.html">
+      <div class="card-number">01</div>
+      <div class="card-title">Name It</div>
+      <p class="card-desc">
+        Click any street on the map and type its name.<br>
+        Explore the city tile by tile through the fog.
+      </p>
+      <div class="card-tags">
+        <span class="tag">Recall</span>
+        <span class="tag">Open world</span>
+        <span class="tag">Fog of war</span>
+      </div>
+      <span class="card-arrow">→</span>
+    </a>
+
+    <a class="card" href="street-finder.html">
+      <div class="card-number">02</div>
+      <div class="card-title">Find It</div>
+      <p class="card-desc">
+        You're given a street name — find it on the map.<br>
+        Use hints if you're stuck, skip if you must.
+      </p>
+      <div class="card-tags">
+        <span class="tag">Recognition</span>
+        <span class="tag">Timed queue</span>
+        <span class="tag">Hints</span>
+      </div>
+      <span class="card-arrow">→</span>
+    </a>
+
   </div>
-  <div class="stats">
-    <span>Streets: <span class="stat-val" id="statTotal">—</span></span>
-    <span>✓ <span class="stat-val correct" id="statCorrect">0</span></span>
-    <span>✗ <span class="stat-val wrong" id="statWrong">0</span></span>
-  </div>
-</header>
-<div style="position:relative;flex:1;display:flex;flex-direction:column;">
-  <div id="map"></div>
-  <div id="loading" class="hidden">
-    <div class="spinner"></div>
-    <div class="loading-text" id="loadingText">Loading…</div>
-  </div>
-  <div class="toast" id="toast"></div>
-  <div class="fog-hint" id="fogHint">🔭 Click anywhere in the fog to explore that area</div>
-  <div class="legend">
-    <div><span class="legend-dot" style="background:#444"></span>Unknown street</div>
-    <div><span class="legend-dot" style="background:#7eb8a0"></span>Correct</div>
-    <div><span class="legend-dot" style="background:#c0604a"></span>Revealed</div>
-    <div><span class="legend-dot" style="background:rgba(10,18,35,0.62);width:10px;height:10px;border-radius:2px;"></span>Unexplored</div>
-  </div>
+
+  <footer>
+    Shared tile cache <span>·</span> OpenStreetMap data <span>·</span> Load a city once, play both modes
+  </footer>
+
 </div>
-
-<script>
-// ── Config ──────────────────────────────────────────────────
-const TILE_DEG = 0.06; // ~6km per tile
-const ROAD_TYPES = 'primary|secondary|tertiary|residential|living_street|pedestrian|unclassified';
-const COLORS = {
-  unknown: { color:'#444', weight:4, opacity:0.75 },
-  hover:   { color:'#a09070', weight:5, opacity:1 },
-  correct: { color:'#7eb8a0', weight:5, opacity:1 },
-  wrong:   { color:'#c0604a', weight:5, opacity:1 },
-};
-
-// ── State ───────────────────────────────────────────────────
-let map, streetLayers = {}, loadedTiles = new Set(), fogLayers = {}, loadingTiles = {}, activePopup = null;
-
-// ── Map ─────────────────────────────────────────────────────
-map = L.map('map', { zoomControl:true, preferCanvas:true });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  maxZoom:19, subdomains:'abcd'
-}).addTo(map);
-
-// ── Tile helpers ────────────────────────────────────────────
-function tileKey(tx, ty) { return tx + '_' + ty; }
-function tileBounds(tx, ty) {
-  return { s: ty*TILE_DEG, n: (ty+1)*TILE_DEG, w: tx*TILE_DEG, e: (tx+1)*TILE_DEG };
-}
-function tilesForBbox(s, n, w, e) {
-  const out = [];
-  const txMin = Math.floor(w/TILE_DEG), txMax = Math.floor(e/TILE_DEG);
-  const tyMin = Math.floor(s/TILE_DEG), tyMax = Math.floor(n/TILE_DEG);
-  for (let tx=txMin; tx<=txMax; tx++)
-    for (let ty=tyMin; ty<=tyMax; ty++)
-      out.push({tx, ty});
-  return out;
-}
-
-// ── Fog of War ──────────────────────────────────────────────
-function addFogTile(tx, ty) {
-  const key = tileKey(tx, ty);
-  if (fogLayers[key]) return;
-  const {s,n,w,e} = tileBounds(tx, ty);
-  const rect = L.rectangle([[s,w],[n,e]], {
-    color:'rgba(0,0,0,0)', fillColor:'rgba(10,18,35,0.62)',
-    fillOpacity:1, weight:0, interactive:true,
-  });
-  rect.on('click', ev => { L.DomEvent.stop(ev); loadTile(tx, ty); });
-  rect.on('mouseover', () => rect.setStyle({fillColor:'rgba(30,60,110,0.45)'}));
-  rect.on('mouseout',  () => rect.setStyle({fillColor:'rgba(10,18,35,0.62)'}));
-  rect.addTo(map);
-  // set crosshair cursor after add
-  setTimeout(() => { const el = rect.getElement(); if(el) el.style.cursor='crosshair'; }, 0);
-  fogLayers[key] = rect;
-}
-
-function removeFogTile(tx, ty) {
-  const key = tileKey(tx, ty);
-  if (fogLayers[key]) { map.removeLayer(fogLayers[key]); delete fogLayers[key]; }
-}
-
-function addLoadingMarker(tx, ty) {
-  const key = tileKey(tx, ty);
-  if (loadingTiles[key]) return;
-  const {s,n,w,e} = tileBounds(tx, ty);
-  const clat = (s+n)/2, clng = (w+e)/2;
-  const icon = L.divIcon({
-    className: '',
-    html: '<div style="width:28px;height:28px;border:2px solid #2a2a2a;border-top-color:#e8d5a3;border-radius:50%;animation:spin 0.8s linear infinite;"></div>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
-  loadingTiles[key] = L.marker([clat, clng], {icon, interactive:false, zIndexOffset:1000}).addTo(map);
-}
-
-function removeLoadingMarker(tx, ty) {
-  const key = tileKey(tx, ty);
-  if (loadingTiles[key]) { map.removeLayer(loadingTiles[key]); delete loadingTiles[key]; }
-}
-
-function refreshFogBorder() {
-  if (loadedTiles.size === 0) return;
-  const loaded = [...loadedTiles].map(k => { const [tx,ty]=k.split('_').map(Number); return {tx,ty}; });
-  const txs = loaded.map(t=>t.tx), tys = loaded.map(t=>t.ty);
-  const txMin=Math.min(...txs)-2, txMax=Math.max(...txs)+2;
-  const tyMin=Math.min(...tys)-2, tyMax=Math.max(...tys)+2;
-  // remove fog from loaded tiles
-  for (const key of Object.keys(fogLayers)) {
-    const [tx,ty]=key.split('_').map(Number);
-    if (loadedTiles.has(tileKey(tx,ty))) removeFogTile(tx,ty);
-  }
-  // add fog to unloaded border tiles
-  for (let tx=txMin; tx<=txMax; tx++)
-    for (let ty=tyMin; ty<=tyMax; ty++) {
-      const key = tileKey(tx,ty);
-      if (!loadedTiles.has(key) && !fogLayers[key]) addFogTile(tx,ty);
-    }
-}
-
-// ── Load streets for a single tile ─────────────────────────
-// ── Tile cache ──────────────────────────────────────────────
-// Two-layer: in-memory (instant, session-scoped) + IndexedDB (persistent, no size cap)
-const CACHE_VERSION = 3;
-const DB_NAME = 'StreetQuizCache';
-const DB_STORE = 'tiles';
-const memCache = {};
-
-// Open IndexedDB once; resolve to db instance
-const dbReady = new Promise((resolve, reject) => {
-  const req = indexedDB.open(DB_NAME, CACHE_VERSION);
-  req.onupgradeneeded = ev => {
-    const db = ev.target.result;
-    // Wipe old stores from previous versions
-    for (const name of db.objectStoreNames) db.deleteObjectStore(name);
-    db.createObjectStore(DB_STORE);
-  };
-  req.onsuccess = ev => resolve(ev.target.result);
-  req.onerror   = ev => {
-    console.warn('Street Quiz: IndexedDB unavailable, falling back to memory-only cache.', ev);
-    resolve(null);
-  };
-});
-
-function cacheKey(s, w, n, e) {
-  const r = v => Math.round(v * 10000) / 10000;
-  return r(s) + '_' + r(w) + '_' + r(n) + '_' + r(e);
-}
-
-async function cacheGet(s, w, n, e) {
-  const k = cacheKey(s, w, n, e);
-  if (memCache[k]) return memCache[k];
-  const db = await dbReady;
-  if (!db) return null;
-  return new Promise(resolve => {
-    const tx = db.transaction(DB_STORE, 'readonly');
-    const req = tx.objectStore(DB_STORE).get(k);
-    req.onsuccess = () => {
-      const val = req.result ?? null;
-      if (val) memCache[k] = val; // promote to memory
-      resolve(val);
-    };
-    req.onerror = () => resolve(null);
-  });
-}
-
-async function cacheSet(s, w, n, e, data) {
-  const k = cacheKey(s, w, n, e);
-  memCache[k] = data;
-  const db = await dbReady;
-  if (!db) return;
-  return new Promise(resolve => {
-    const tx = db.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).put(data, k);
-    tx.oncomplete = resolve;
-    tx.onerror    = resolve; // fail silently
-  });
-}
-
-async function loadTile(tx, ty) {
-  const key = tileKey(tx,ty);
-  if (loadedTiles.has(key)) return;
-  loadedTiles.add(key);
-  removeFogTile(tx, ty);
-  refreshFogBorder(); // immediately show fog around new tile before fetch completes
-
-  addLoadingMarker(tx, ty);
-  const {s,n,w,e} = tileBounds(tx,ty);
-
-  // Check cache first
-  let osm = await cacheGet(s, w, n, e);
-  if (!osm) {
-    const query = '[out:json][timeout:30];\nway["highway"~"^(' + ROAD_TYPES + ')$"]["name"](' + s + ',' + w + ',' + n + ',' + e + ');\nout geom;';
-    const MAX_RETRIES = 4;
-    const BACKOFF_MS  = [2000, 5000, 10000, 20000];
-    let success = false;
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:query});
-        osm = await r.json();
-        await cacheSet(s, w, n, e, osm);
-        success = true;
-        break;
-      } catch(err) {
-        const isLast = attempt === MAX_RETRIES - 1;
-        if (isLast) {
-          showToast('Failed to load area after ' + MAX_RETRIES + ' attempts.');
-          loadedTiles.delete(key);
-          removeLoadingMarker(tx, ty);
-          refreshFogBorder();
-          return;
-        }
-        const wait = BACKOFF_MS[attempt];
-        showToast('Retrying in ' + (wait/1000) + 's… (' + (attempt+1) + '/' + (MAX_RETRIES-1) + ')');
-        await new Promise(res => setTimeout(res, wait));
-      }
-    }
-  }
-
-  let newCount = 0;
-  for (const el of osm.elements) {
-    if (!el.geometry || !el.tags?.name) continue;
-    const sk = normalize(el.tags.name);
-    if (!streetLayers[sk]) { streetLayers[sk] = {layers:[], osmName:el.tags.name, state:'unknown'}; newCount++; }
-    const coords = el.geometry.map(p=>[p.lat,p.lon]);
-    const layer = L.polyline(coords, {...COLORS.unknown, interactive:true});
-    streetLayers[sk].layers.push(layer);
-    const st = streetLayers[sk].state;
-    if (st==='correct') layer.setStyle(COLORS.correct);
-    else if (st==='wrong') layer.setStyle(COLORS.wrong);
-    layer.on('mouseover', ()=>{ if(streetLayers[sk].state==='unknown') streetLayers[sk].layers.forEach(l=>l.setStyle(COLORS.hover)); });
-    layer.on('mouseout',  ()=>{ if(streetLayers[sk].state==='unknown') streetLayers[sk].layers.forEach(l=>l.setStyle(COLORS.unknown)); });
-    layer.on('click', ev=>openPopup(sk, ev.latlng));
-    layer.on('contextmenu', ev=>{ L.DomEvent.stop(ev); resetStreet(sk); });
-    layer.addTo(map);
-  }
-
-  removeLoadingMarker(tx, ty);
-  document.getElementById('statTotal').textContent = Object.keys(streetLayers).length;
-  updateStats(); triggerAutoSave();
-  if (newCount > 0) showToast('+' + newCount + ' streets revealed');
-}
-
-// ── City load ───────────────────────────────────────────────
-async function loadCity() {
-  const cityRaw = document.getElementById('cityInput').value.trim();
-  if (!cityRaw) return;
-  setLoading(true, 'Geocoding city…');
-  clearAll();
-
-  let geoData;
-  try {
-    const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(cityRaw) + '&limit=1&lang=en');
-    geoData = await r.json();
-  } catch(e) {
-    showToast('Geocoding failed. Check your connection.'); setLoading(false); return;
-  }
-  if (!geoData.features?.length) { showToast('City not found.'); setLoading(false); return; }
-
-  const feat = geoData.features[0];
-  const [lon, lat] = feat.geometry.coordinates;
-  const ext = feat.properties.extent;
-  let s,n,w,e;
-  if (ext) { [w,s,e,n]=ext; } else { const d=0.08; s=lat-d; n=lat+d; w=lon-d; e=lon+d; }
-
-  // Cap very large metros
-  const maxDeg=0.38, clat=(s+n)/2, clon=(w+e)/2;
-  s=Math.max(s,clat-maxDeg); n=Math.min(n,clat+maxDeg);
-  w=Math.max(w,clon-maxDeg); e=Math.min(e,clon+maxDeg);
-
-  map.fitBounds([[s,w],[n,e]]);
-  setLoading(true, 'Loading streets…');
-
-  // Load all initial tiles in parallel
-  const tiles = tilesForBbox(s,n,w,e);
-  await Promise.all(tiles.map(({tx,ty})=>loadTile(tx,ty)));
-
-  setLoading(false);
-  document.getElementById('statTotal').textContent = Object.keys(streetLayers).length;
-
-  const hint = document.getElementById('fogHint');
-  hint.classList.add('show');
-  setTimeout(()=>hint.classList.remove('show'), 4500);
-}
-
-// ── Popup ───────────────────────────────────────────────────
-function openPopup(key, latlng) {
-  if (activePopup) map.closePopup(activePopup);
-  const street = streetLayers[key];
-  const answered = street.state !== 'unknown';
-  const div = document.createElement('div');
-  div.className = 'popup-inner';
-  if (answered) {
-    div.innerHTML = '<div class="popup-label">Street name</div><div class="popup-result ' + street.state + '">' + street.osmName + (street.state==='correct'?' ✓ Correct!':' ✗ Revealed') + '</div>';
-  } else {
-    div.innerHTML = '<div class="popup-label">What street is this?</div><div class="popup-input-row"><input class="popup-input" id="streetGuess" type="search" placeholder="Street name\u2026" autocomplete="off"/><button class="popup-submit" onclick="submitGuess(\'' + key + '\')">&#8594;</button></div><div id="guessResult"></div><button id="discloseBtn" onclick="discloseStreet(\'' + key + '\')" style="margin-top:8px;width:100%;padding:6px;background:var(--border);color:var(--muted);border:none;border-radius:3px;font-family:inherit;font-size:0.75rem;cursor:pointer;">Give up — show name</button>';
-  }
-  activePopup = L.popup({closeButton:true, maxWidth:300}).setLatLng(latlng).setContent(div).openOn(map);
-  if (!answered) {
-    // Use double-rAF to ensure Leaflet has finished rendering the popup DOM
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      const inp=document.getElementById('streetGuess');
-      if(inp){inp.focus();inp.addEventListener('keydown',e=>{if(e.key==='Enter')submitGuess(key);});}
-    }));
-  }
-}
-
-// ── Matching ────────────────────────────────────────────────
-// Street type suffixes — stripped before comparison so "Market" matches "Market Street"
-const SUFFIXES = [
-  'street','st','avenue','ave','boulevard','blvd','drive','dr','road','rd',
-  'lane','ln','court','ct','place','pl','way','terrace','ter','circle','cir',
-  'highway','hwy','expressway','expy','alley','aly','trail','trl','run',
-];
-const SUFFIX_RE = new RegExp('\\s+(' + SUFFIXES.join('|') + ')\\s*$', 'i');
-
-function normalize(name) { return name.toLowerCase().replace(/[^a-z0-9]/g,''); }
-
-function stripSuffix(name) { return name.replace(SUFFIX_RE, '').trim(); }
-
-function levenshtein(a,b) {
-  const m=a.length,n=b.length;
-  const dp=Array.from({length:m+1},(_,i)=>Array(n+1).fill(0).map((_,j)=>i===0?j:j===0?i:0));
-  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
-    dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
-  return dp[m][n];
-}
-
-function matchQuality(guess,osmName) {
-  // Compare both with full name and with suffix stripped from the answer,
-  // so "Market" matches "Market Street" and "Market St" also matches.
-  const g  = normalize(guess);
-  const a  = normalize(osmName);
-  const as = normalize(stripSuffix(osmName));
-  const dist = Math.min(levenshtein(g, a), levenshtein(g, as));
-  const ref = as.length || a.length; // use stripped length as reference
-  if(dist===0) return 'correct';
-  if(dist<=Math.max(1,Math.floor(ref*0.2))) return 'close';
-  return 'wrong';
-}
-
-// ── Street label rendering ──────────────────────────────────
-const streetLabels = {}; // key -> [L.marker, ...]
-const LABEL_SPACING_PX = 300; // minimum pixels between repeated labels
-
-function makeLabel(latlng, angle, osmName, color) {
-  const icon = L.divIcon({
-    className: '',
-    html: '<div style="position:absolute;transform:translate(-50%,-50%) rotate(' + angle + 'deg);white-space:nowrap;font-family:DM Mono,monospace;font-size:10px;font-weight:500;color:' + color + ';text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:none;">' + osmName + '</div>',
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-  return L.marker(latlng, {icon, interactive:false, zIndexOffset:500});
-}
-
-function angleForSegment(pts2d) {
-  const pA = pts2d[0], pB = pts2d[pts2d.length - 1];
-  let angle = Math.atan2(pB.y - pA.y, pB.x - pA.x) * 180 / Math.PI;
-  if (angle > 90)  angle -= 180;
-  if (angle < -90) angle += 180;
-  return angle;
-}
-
-function renderStreetLabel(key) {
-  const street = streetLayers[key];
-  if (!street || !street.layers.length) return;
-
-  // Remove existing labels
-  if (streetLabels[key]) {
-    streetLabels[key].forEach(m => map.removeLayer(m));
-    delete streetLabels[key];
-  }
-
-  const color = street.state === 'correct' ? '#7eb8a0' : '#c0604a';
-  const markers = [];
-
-  for (const layer of street.layers) {
-    const pts = layer.getLatLngs();
-    if (pts.length < 2) continue;
-
-    const pts2d = pts.map(p => map.latLngToContainerPoint(p));
-    const angle = angleForSegment(pts2d);
-
-    // Walk along the segment in screen-pixel distance, placing a label every LABEL_SPACING_PX
-    let distSinceLast = LABEL_SPACING_PX / 2; // start at half-spacing so first label is near start
-    for (let i = 1; i < pts2d.length; i++) {
-      const ax = pts2d[i-1].x, ay = pts2d[i-1].y;
-      const bx = pts2d[i].x,   by = pts2d[i].y;
-      const segLen = Math.hypot(bx - ax, by - ay);
-      let remaining = segLen;
-      let t = 0;
-      while (remaining > 0) {
-        const needed = LABEL_SPACING_PX - distSinceLast;
-        if (needed <= remaining) {
-          t += needed / segLen;
-          const latlng = L.latLng(
-            pts[i-1].lat + t * (pts[i].lat - pts[i-1].lat),
-            pts[i-1].lng + t * (pts[i].lng - pts[i-1].lng),
-          );
-          markers.push(makeLabel(latlng, angle, street.osmName, color).addTo(map));
-          distSinceLast = 0;
-          remaining -= needed;
-        } else {
-          distSinceLast += remaining;
-          remaining = 0;
-        }
-      }
-    }
-
-    // If the whole segment was shorter than half-spacing, place one label at midpoint
-    if (markers.length === 0) {
-      const mid = pts[Math.floor(pts.length / 2)];
-      markers.push(makeLabel(mid, angle, street.osmName, color).addTo(map));
-    }
-  }
-
-  streetLabels[key] = markers;
-}
-
-// Re-render all labels on zoom so spacing/angle stays correct
-map.on('zoomend', () => {
-  for (const key of Object.keys(streetLabels)) {
-    renderStreetLabel(key);
-  }
-});
-
-function discloseStreet(key) {
-  const street=streetLayers[key];
-  street.state='wrong'; street.layers.forEach(l=>l.setStyle(COLORS.wrong));
-  renderStreetLabel(key); triggerAutoSave();
-  const res=document.getElementById('guessResult');
-  if(res){ res.className='popup-result wrong'; res.innerHTML='✗ It\'s <strong>'+street.osmName+'</strong>'; }
-  const inp=document.getElementById('streetGuess');
-  if(inp){inp.disabled=true;document.querySelector('.popup-submit').disabled=true;}
-  document.getElementById('discloseBtn')?.remove();
-  updateStats();
-}
-
-function submitGuess(key) {
-  const inp=document.getElementById('streetGuess');
-  if(!inp) return;
-  const guess=inp.value.trim();
-  if(!guess) return;
-  const street=streetLayers[key],quality=matchQuality(guess,street.osmName);
-  const res=document.getElementById('guessResult');
-  if(quality==='correct') {
-    street.state='correct'; street.layers.forEach(l=>l.setStyle(COLORS.correct));
-    renderStreetLabel(key);
-    updateStats(); triggerAutoSave();
-    document.getElementById('discloseBtn')?.remove();
-    // Brief flash of success then close
-    res.className='popup-result correct'; res.innerHTML='✓ '+street.osmName;
-    setTimeout(() => { if(activePopup) { map.closePopup(activePopup); activePopup=null; } }, 600);
-  } else if(quality==='close') {
-    res.className='popup-result close'; res.textContent='◎ Close! Check your spelling.';
-    inp.value=''; inp.focus();
-  } else {
-    res.className='popup-result wrong'; res.textContent='✗ Wrong — try again';
-    inp.value=''; inp.focus();
-  }
-}
-
-// ── Clear Area (drag to draw box) ───────────────────────────
-let clearAreaMode = false;
-let clearDragStart = null;
-let clearRect = null;
-
-function toggleClearArea() {
-  clearAreaMode = !clearAreaMode;
-  const btn = document.getElementById('clearAreaBtn');
-  const mapEl = document.getElementById('map');
-  if (clearAreaMode) {
-    btn.style.background = 'var(--wrong)';
-    btn.style.color = '#fff';
-    btn.textContent = 'Cancel';
-    mapEl.classList.add('clear-area-mode');
-    map.dragging.disable();
-    map.on('mousedown', onClearMouseDown);
-  } else {
-    exitClearArea();
-  }
-}
-
-function exitClearArea() {
-  clearAreaMode = false;
-  const btn = document.getElementById('clearAreaBtn');
-  btn.style.background = 'var(--border)';
-  btn.style.color = 'var(--muted)';
-  btn.textContent = 'Clear Area';
-  document.getElementById('map').classList.remove('clear-area-mode');
-  map.dragging.enable();
-  map.off('mousedown', onClearMouseDown);
-  map.off('mousemove', onClearMouseMove);
-  map.off('mouseup', onClearMouseUp);
-  if (clearRect) { map.removeLayer(clearRect); clearRect = null; }
-  clearDragStart = null;
-}
-
-function onClearMouseDown(ev) {
-  clearDragStart = ev.latlng;
-  if (clearRect) { map.removeLayer(clearRect); clearRect = null; }
-  clearRect = L.rectangle([clearDragStart, clearDragStart], {
-    color: 'var(--wrong)', weight: 2,
-    fillColor: 'rgba(192,96,74,0.15)', fillOpacity: 1,
-    interactive: false,
-  }).addTo(map);
-  map.on('mousemove', onClearMouseMove);
-  map.on('mouseup', onClearMouseUp);
-}
-
-function onClearMouseMove(ev) {
-  if (!clearRect || !clearDragStart) return;
-  clearRect.setBounds([clearDragStart, ev.latlng]);
-}
-
-function onClearMouseUp(ev) {
-  map.off('mousemove', onClearMouseMove);
-  map.off('mouseup', onClearMouseUp);
-  if (!clearDragStart) return;
-
-  const bounds = L.latLngBounds(clearDragStart, ev.latlng);
-  if (clearRect) { map.removeLayer(clearRect); clearRect = null; }
-
-  // Reset all answered streets whose midpoint falls within the box
-  let count = 0;
-  for (const [key, street] of Object.entries(streetLayers)) {
-    if (street.state === 'unknown') continue;
-    // Check if any segment midpoint is inside bounds
-    const inside = street.layers.some(layer => {
-      const pts = layer.getLatLngs();
-      const mid = pts[Math.floor(pts.length / 2)];
-      return bounds.contains(mid);
-    });
-    if (inside) {
-      street.state = 'unknown';
-      street.layers.forEach(l => l.setStyle(COLORS.unknown));
-      if (streetLabels[key]) { streetLabels[key].forEach(m => map.removeLayer(m)); delete streetLabels[key]; }
-      count++;
-    }
-  }
-
-  exitClearArea();
-  if (count > 0) {
-    updateStats();
-    triggerAutoSave();
-    showToast('Cleared ' + count + ' street' + (count === 1 ? '' : 's'));
-  } else {
-    showToast('No answered streets in that area');
-  }
-}
-
-// ── Helpers ─────────────────────────────────────────────────
-function resetStreet(key) {
-  const street = streetLayers[key];
-  if (!street || street.state === 'unknown') return;
-  street.state = 'unknown';
-  street.layers.forEach(l => l.setStyle(COLORS.unknown));
-  if (streetLabels[key]) { streetLabels[key].forEach(m => map.removeLayer(m)); delete streetLabels[key]; }
-  if (activePopup) { map.closePopup(activePopup); activePopup = null; }
-  updateStats();
-  triggerAutoSave();
-  showToast('Reset: ' + street.osmName);
-}
-
-function updateStats() {
-  let c=0,w=0;
-  for(const s of Object.values(streetLayers)){if(s.state==='correct')c++;else if(s.state==='wrong')w++;}
-  document.getElementById('statCorrect').textContent=c;
-  document.getElementById('statWrong').textContent=w;
-}
-
-function clearAll() {
-  for(const {layers} of Object.values(streetLayers)) layers.forEach(l=>map.removeLayer(l));
-  for(const l of Object.values(fogLayers)) map.removeLayer(l);
-  for(const l of Object.values(loadingTiles)) map.removeLayer(l);
-  for(const markers of Object.values(streetLabels)) markers.forEach(m => map.removeLayer(m));
-  Object.keys(streetLabels).forEach(k=>delete streetLabels[k]);
-  streetLayers={}; loadedTiles=new Set(); fogLayers={}; loadingTiles={};
-  if(activePopup){map.closePopup(activePopup);activePopup=null;}
-  document.getElementById('statTotal').textContent='—';
-  document.getElementById('statCorrect').textContent='0';
-  document.getElementById('statWrong').textContent='0';
-}
-
-function resetAnswers() {
-  for(const s of Object.values(streetLayers)){s.state='unknown';s.layers.forEach(l=>l.setStyle(COLORS.unknown));}
-  for(const markers of Object.values(streetLabels)) markers.forEach(m => map.removeLayer(m));
-  Object.keys(streetLabels).forEach(k=>delete streetLabels[k]);
-  document.getElementById('statCorrect').textContent='0';
-  document.getElementById('statWrong').textContent='0';
-  if(activePopup){map.closePopup(activePopup);activePopup=null;}
-  triggerAutoSave();
-}
-
-function setLoading(show,text='') {
-  document.getElementById('loading').classList.toggle('hidden',!show);
-  if(text) document.getElementById('loadingText').textContent=text;
-}
-
-let toastTimer;
-function showToast(msg) {
-  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
-}
-
-
-// ── Auto-save / restore (IndexedDB) ─────────────────────────
-const STATE_STORE = 'state';
-const STATE_KEY   = 'current';
-
-// Reuse the same dbReady promise but ensure STATE_STORE exists
-const stateDbReady = new Promise((resolve, reject) => {
-  const req = indexedDB.open('StreetQuizState', 1);
-  req.onupgradeneeded = ev => {
-    ev.target.result.createObjectStore(STATE_STORE);
-  };
-  req.onsuccess = ev => resolve(ev.target.result);
-  req.onerror   = ev => { console.warn('State DB unavailable', ev); resolve(null); };
-});
-
-function buildSaveObject() {
-  const city = document.getElementById('cityInput').value.trim();
-  const mapCenter = map.getCenter();
-  const streetData = {};
-  for (const [key, val] of Object.entries(streetLayers)) {
-    if (val.state !== 'unknown') {
-      streetData[key] = { osmName: val.osmName, state: val.state };
-    }
-  }
-  return {
-    version: 2,
-    city,
-    tileDeg: TILE_DEG,
-    mapCenter: { lat: mapCenter.lat, lng: mapCenter.lng },
-    mapZoom: map.getZoom(),
-    loadedTiles: [...loadedTiles],
-    streets: streetData,
-    savedAt: new Date().toISOString(),
-  };
-}
-
-// Debounced auto-save — writes at most once per second
-let autoSaveTimer = null;
-function triggerAutoSave() {
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(autoSave, 1000);
-}
-
-async function autoSave() {
-  const db = await stateDbReady;
-  if (!db) return;
-  const state = buildSaveObject();
-  const tx = db.transaction(STATE_STORE, 'readwrite');
-  tx.objectStore(STATE_STORE).put(state, STATE_KEY);
-}
-
-async function restoreState() {
-  const db = await stateDbReady;
-  if (!db) return false;
-  const state = await new Promise(resolve => {
-    const tx = db.transaction(STATE_STORE, 'readonly');
-    const req = tx.objectStore(STATE_STORE).get(STATE_KEY);
-    req.onsuccess = () => resolve(req.result ?? null);
-    req.onerror   = () => resolve(null);
-  });
-  if (!state || !state.city || !state.loadedTiles) return false;
-
-  document.getElementById('cityInput').value = state.city;
-  if (state.mapCenter && state.mapZoom) {
-    map.setView([state.mapCenter.lat, state.mapCenter.lng], state.mapZoom);
-  }
-
-  setLoading(true, 'Restoring session…');
-
-  const savedTileDeg = state.tileDeg || 0.06;
-  const bboxes = state.loadedTiles.map(key => {
-    const [tx, ty] = key.split('_').map(Number);
-    return { s: ty*savedTileDeg, n: (ty+1)*savedTileDeg, w: tx*savedTileDeg, e: (tx+1)*savedTileDeg };
-  });
-  const tilesToLoad = new Set();
-  for (const {s, n, w, e} of bboxes) {
-    const txMin = Math.floor(w/TILE_DEG), txMax = Math.floor(e/TILE_DEG);
-    const tyMin = Math.floor(s/TILE_DEG), tyMax = Math.floor(n/TILE_DEG);
-    for (let tx=txMin; tx<=txMax; tx++)
-      for (let ty=tyMin; ty<=tyMax; ty++)
-        tilesToLoad.add(tileKey(tx, ty));
-  }
-  await Promise.all([...tilesToLoad].map(key => {
-    const [tx, ty] = key.split('_').map(Number);
-    return loadTile(tx, ty);
-  }));
-
-  for (const [key, saved] of Object.entries(state.streets || {})) {
-    if (!streetLayers[key]) continue;
-    streetLayers[key].state = saved.state;
-    const style = saved.state === 'correct' ? COLORS.correct : COLORS.wrong;
-    streetLayers[key].layers.forEach(l => l.setStyle(style));
-    renderStreetLabel(key);
-  }
-
-  refreshFogBorder();
-  setLoading(false);
-  updateStats();
-  document.getElementById('statTotal').textContent = Object.keys(streetLayers).length;
-  showToast('Session restored — ' + state.city);
-  return true;
-}
-
-// Export to JSON file (backup / sharing)
-function exportSave() {
-  const state = buildSaveObject();
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const safeName = state.city.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  a.download = 'streetquiz_' + safeName + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showToast('Exported!');
-}
-
-// Import from JSON file — restores into IndexedDB then reloads state
-async function importSave(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  event.target.value = '';
-
-  let state;
-  try {
-    state = JSON.parse(await file.text());
-  } catch(e) {
-    showToast('Invalid save file.'); return;
-  }
-  if (!state.version || !state.city || !state.loadedTiles) {
-    showToast('Unrecognised save format.'); return;
-  }
-
-  // Persist to IndexedDB then restore from it
-  const db = await stateDbReady;
-  if (db) {
-    await new Promise(resolve => {
-      const tx = db.transaction(STATE_STORE, 'readwrite');
-      tx.objectStore(STATE_STORE).put(state, STATE_KEY);
-      tx.oncomplete = resolve;
-    });
-  }
-
-  clearAll();
-  await restoreState();
-}
-
-// ── Boot ─────────────────────────────────────────────────────
-// Request persistent storage so the browser won't silently evict IndexedDB
-if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persist().then(granted => {
-    if (granted) {
-      console.log('Street Quiz: persistent storage granted — cache will not be evicted.');
-    } else {
-      console.warn('Street Quiz: persistent storage denied — browser may evict cache under pressure.');
-    }
-  });
-}
-
-restoreState(); // auto-restore; if nothing saved, map stays blank
-</script>
 </body>
 </html>

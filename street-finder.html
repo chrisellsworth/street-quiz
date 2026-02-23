@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Street Finder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:#0f0f0f; --panel:#1a1a1a; --border:#2a2a2a;
+    --accent:#e8d5a3; --accent2:#7eb8a0; --wrong:#c0604a;
+    --text:#e0d8cc; --muted:#666;
+  }
+  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); z-index:1000; flex-shrink:0; }
+  .title { font-family:'Playfair Display',serif; font-size:1.3rem; color:var(--accent); }
+  .city-form { display:flex; gap:8px; align-items:center; }
+  .city-form input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 12px; font-family:'DM Mono',monospace; font-size:0.8rem; border-radius:3px; width:180px; outline:none; }
+  .city-form input:focus { border-color:var(--accent); }
+  .city-form button, .btn { background:var(--accent); color:#0f0f0f; border:none; padding:6px 14px; font-family:'DM Mono',monospace; font-size:0.8rem; font-weight:500; border-radius:3px; cursor:pointer; transition:opacity 0.15s; }
+  .city-form button:hover, .btn:hover { opacity:0.85; }
+  .stats { display:flex; gap:20px; align-items:center; font-size:0.75rem; color:var(--muted); }
+  .stat-val { color:var(--accent); font-weight:500; }
+  .stat-val.correct { color:var(--accent2); }
+  .stat-val.wrong { color:var(--wrong); }
+
+  /* Map + side panel layout */
+  .game-area { flex:1; display:flex; overflow:hidden; position:relative; }
+  #map { flex:1; background:#111; cursor:crosshair; }
+  .leaflet-tile-pane { filter:grayscale(1) brightness(0.25) contrast(1.4); }
+  .leaflet-control-attribution { display:none; }
+  .leaflet-control-zoom a { background:var(--panel) !important; color:var(--accent) !important; border-color:var(--border) !important; }
+
+  /* Side panel */
+  .side-panel {
+    width:260px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; z-index:100; overflow:hidden;
+  }
+  .target-area {
+    padding:20px 16px; border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  .target-label { font-size:0.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.12em; margin-bottom:10px; }
+  .target-name {
+    font-family:'Playfair Display',serif; font-size:1.4rem; color:var(--accent);
+    line-height:1.2; margin-bottom:14px; min-height:2.4rem;
+  }
+  .target-actions { display:flex; flex-direction:column; gap:6px; }
+  .action-btn {
+    background:var(--border); color:var(--text); border:none; padding:8px 12px;
+    font-family:'DM Mono',monospace; font-size:0.78rem; border-radius:3px; cursor:pointer;
+    text-align:left; transition:background 0.15s;
+  }
+  .action-btn:hover { background:#333; }
+  .action-btn.primary { background:var(--accent); color:#0f0f0f; font-weight:500; }
+  .action-btn.primary:hover { opacity:0.85; }
+
+  /* Result flash */
+  .result-flash {
+    padding:10px 12px; border-radius:3px; font-size:0.8rem; margin-top:10px;
+    display:none;
+  }
+  .result-flash.correct { background:rgba(126,184,160,0.15); color:var(--accent2); border:1px solid rgba(126,184,160,0.3); }
+  .result-flash.wrong   { background:rgba(192,96,74,0.15);   color:var(--wrong);   border:1px solid rgba(192,96,74,0.3); }
+  .result-flash.hint    { background:rgba(232,213,163,0.1);   color:var(--accent);  border:1px solid rgba(232,213,163,0.25); font-size:0.75rem; }
+
+  /* History list */
+  .history { flex:1; overflow-y:auto; padding:12px 0; }
+  .history::-webkit-scrollbar { width:4px; }
+  .history::-webkit-scrollbar-track { background:transparent; }
+  .history::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .history-item {
+    padding:6px 16px; font-size:0.75rem; display:flex; align-items:center; gap:8px;
+    border-bottom:1px solid rgba(255,255,255,0.03); color:var(--muted);
+  }
+  .history-item .hi-icon { font-size:0.7rem; flex-shrink:0; }
+  .history-item.correct { color:var(--accent2); }
+  .history-item.wrong   { color:var(--wrong); opacity:0.7; }
+  .history-item.skipped { color:var(--muted); opacity:0.5; }
+
+  /* Loading */
+  #loading { position:absolute; inset:0; background:rgba(15,15,15,0.88); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2000; gap:16px; }
+  #loading.hidden { display:none; }
+  .spinner { width:36px; height:36px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-text { font-size:0.8rem; color:var(--muted); }
+
+  .toast { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); background:var(--panel); border:1px solid var(--border); padding:10px 18px; border-radius:4px; font-size:0.8rem; color:var(--muted); z-index:3000; opacity:0; transition:opacity 0.3s; pointer-events:none; white-space:nowrap; }
+  .toast.show { opacity:1; }
+
+  .fog-hint { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); background:rgba(26,26,26,0.92); border:1px solid var(--border); padding:8px 16px; border-radius:4px; font-size:0.72rem; color:var(--muted); z-index:1000; pointer-events:none; white-space:nowrap; opacity:0; transition:opacity 0.5s; }
+  .fog-hint.show { opacity:1; }
+
+  .no-streets { padding:20px 16px; color:var(--muted); font-size:0.78rem; line-height:1.6; }
+
+  /* Other game link */
+  .game-link { font-size:0.7rem; color:var(--muted); text-decoration:none; padding:2px 0; border-bottom:1px solid var(--border); padding-bottom:2px; }
+  .game-link:hover { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="title">Street Finder</div>
+    <a href="street-quiz.html" class="game-link">→ Name It mode</a>
+  </div>
+  <div class="city-form">
+    <input type="text" id="cityInput" placeholder="City, Country"/>
+    <button onclick="loadCity()">Load</button>
+  </div>
+  <div class="stats">
+    <span>Pool: <span class="stat-val" id="statTotal">—</span></span>
+    <span>✓ <span class="stat-val correct" id="statCorrect">0</span></span>
+    <span>✗ <span class="stat-val wrong" id="statWrong">0</span></span>
+  </div>
+</header>
+
+<div class="game-area">
+  <div id="map"></div>
+
+  <div class="side-panel">
+    <div class="target-area">
+      <div class="target-label">Find this street</div>
+      <div class="target-name" id="targetName">—</div>
+      <div class="target-actions" id="targetActions">
+        <div class="no-streets">Load a city to start playing.</div>
+      </div>
+      <div class="result-flash" id="resultFlash"></div>
+    </div>
+    <div class="history" id="history"></div>
+  </div>
+
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">Loading…</div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="fog-hint" id="fogHint">🔭 Click anywhere in the fog to explore that area</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG — must match street-quiz.html so cache keys align
+// ═══════════════════════════════════════════════════════════
+const TILE_DEG   = 0.06;
+const ROAD_TYPES = 'primary|secondary|tertiary|residential|living_street|pedestrian|unclassified';
+
+const COLORS = {
+  unknown:  { color:'#333', weight:3, opacity:0.6 },
+  hover:    { color:'#a09070', weight:5, opacity:1 },
+  correct:  { color:'#7eb8a0', weight:5, opacity:1 },
+  wrong:    { color:'#c0604a', weight:5, opacity:1 },
+  skipped:  { color:'#444',   weight:3, opacity:0.5 },
+  hint:     { color:'#7070c0', weight:5, opacity:0.8 },
+};
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let map;
+let streetLayers = {};   // normalizedName -> { layers, osmName, state }
+let loadedTiles  = new Set();
+let fogLayers    = {};
+let loadingTiles = {};
+
+// Game state
+let queue        = [];   // shuffled array of streetKeys to ask
+let queueIndex   = 0;
+let currentKey   = null;
+let hintMarker   = null;
+let score        = { correct:0, wrong:0 };
+let answered     = false; // whether current question has been answered/skipped
+
+// ═══════════════════════════════════════════════════════════
+// MAP
+// ═══════════════════════════════════════════════════════════
+map = L.map('map', { zoomControl:true, preferCanvas:true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+  maxZoom:19, subdomains:'abcd'
+}).addTo(map);
+
+map.on('click', onMapClick);
+
+// ═══════════════════════════════════════════════════════════
+// SHARED CACHE (same DB/store as street-quiz.html)
+// ═══════════════════════════════════════════════════════════
+const CACHE_VERSION = 3;
+const DB_NAME  = 'StreetQuizCache';
+const DB_STORE = 'tiles';
+const memCache = {};
+
+const dbReady = new Promise((resolve) => {
+  const req = indexedDB.open(DB_NAME, CACHE_VERSION);
+  req.onupgradeneeded = ev => {
+    const db = ev.target.result;
+    for (const name of db.objectStoreNames) db.deleteObjectStore(name);
+    db.createObjectStore(DB_STORE);
+  };
+  req.onsuccess = ev => resolve(ev.target.result);
+  req.onerror   = ()  => { console.warn('IndexedDB unavailable'); resolve(null); };
+});
+
+function cacheKey(s, w, n, e) {
+  const r = v => Math.round(v * 10000) / 10000;
+  return r(s) + '_' + r(w) + '_' + r(n) + '_' + r(e);
+}
+
+async function cacheGet(s, w, n, e) {
+  const k = cacheKey(s, w, n, e);
+  if (memCache[k]) return memCache[k];
+  const db = await dbReady;
+  if (!db) return null;
+  return new Promise(resolve => {
+    const tx  = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(k);
+    req.onsuccess = () => { const v = req.result ?? null; if (v) memCache[k]=v; resolve(v); };
+    req.onerror   = () => resolve(null);
+  });
+}
+
+async function cacheSet(s, w, n, e, data) {
+  const k = cacheKey(s, w, n, e);
+  memCache[k] = data;
+  const db = await dbReady;
+  if (!db) return;
+  return new Promise(resolve => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(data, k);
+    tx.oncomplete = resolve;
+    tx.onerror    = resolve;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// TILE HELPERS
+// ═══════════════════════════════════════════════════════════
+function tileKey(tx, ty) { return tx + '_' + ty; }
+function tileBounds(tx, ty) {
+  return { s:ty*TILE_DEG, n:(ty+1)*TILE_DEG, w:tx*TILE_DEG, e:(tx+1)*TILE_DEG };
+}
+function tilesForBbox(s, n, w, e) {
+  const out = [];
+  for (let tx=Math.floor(w/TILE_DEG); tx<=Math.floor(e/TILE_DEG); tx++)
+    for (let ty=Math.floor(s/TILE_DEG); ty<=Math.floor(n/TILE_DEG); ty++)
+      out.push({tx,ty});
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FOG OF WAR
+// ═══════════════════════════════════════════════════════════
+function addFogTile(tx, ty) {
+  const key = tileKey(tx, ty);
+  if (fogLayers[key]) return;
+  const {s,n,w,e} = tileBounds(tx, ty);
+  const rect = L.rectangle([[s,w],[n,e]], {
+    color:'rgba(0,0,0,0)', fillColor:'rgba(10,18,35,0.62)', fillOpacity:1, weight:0, interactive:true,
+  });
+  rect.on('click', ev => { L.DomEvent.stop(ev); loadTile(tx, ty); });
+  rect.on('mouseover', () => rect.setStyle({fillColor:'rgba(30,60,110,0.45)'}));
+  rect.on('mouseout',  () => rect.setStyle({fillColor:'rgba(10,18,35,0.62)'}));
+  rect.addTo(map);
+  setTimeout(() => { const el = rect.getElement(); if (el) el.style.cursor = 'crosshair'; }, 0);
+  fogLayers[key] = rect;
+}
+
+function removeFogTile(tx, ty) {
+  const key = tileKey(tx, ty);
+  if (fogLayers[key]) { map.removeLayer(fogLayers[key]); delete fogLayers[key]; }
+}
+
+function refreshFogBorder() {
+  if (loadedTiles.size === 0) return;
+  const loaded = [...loadedTiles].map(k => { const [tx,ty]=k.split('_').map(Number); return {tx,ty}; });
+  const txs = loaded.map(t=>t.tx), tys = loaded.map(t=>t.ty);
+  const txMin=Math.min(...txs)-2, txMax=Math.max(...txs)+2;
+  const tyMin=Math.min(...tys)-2, tyMax=Math.max(...tys)+2;
+  for (const key of Object.keys(fogLayers)) {
+    const [tx,ty]=key.split('_').map(Number);
+    if (loadedTiles.has(tileKey(tx,ty))) removeFogTile(tx,ty);
+  }
+  for (let tx=txMin; tx<=txMax; tx++)
+    for (let ty=tyMin; ty<=tyMax; ty++) {
+      const key = tileKey(tx,ty);
+      if (!loadedTiles.has(key) && !fogLayers[key]) addFogTile(tx,ty);
+    }
+}
+
+function addLoadingMarker(tx, ty) {
+  const key = tileKey(tx,ty);
+  if (loadingTiles[key]) return;
+  const {s,n,w,e} = tileBounds(tx,ty);
+  const icon = L.divIcon({
+    className:'',
+    html:'<div style="width:28px;height:28px;border:2px solid #2a2a2a;border-top-color:#e8d5a3;border-radius:50%;animation:spin 0.8s linear infinite;"></div>',
+    iconSize:[28,28], iconAnchor:[14,14],
+  });
+  loadingTiles[key] = L.marker([(s+n)/2,(w+e)/2], {icon,interactive:false,zIndexOffset:1000}).addTo(map);
+}
+
+function removeLoadingMarker(tx, ty) {
+  const key = tileKey(tx,ty);
+  if (loadingTiles[key]) { map.removeLayer(loadingTiles[key]); delete loadingTiles[key]; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TILE LOADING
+// ═══════════════════════════════════════════════════════════
+function normalize(name) { return name.toLowerCase().replace(/[^a-z0-9]/g,''); }
+
+async function loadTile(tx, ty) {
+  const key = tileKey(tx,ty);
+  if (loadedTiles.has(key)) return;
+  loadedTiles.add(key);
+  removeFogTile(tx,ty);
+  refreshFogBorder();
+  addLoadingMarker(tx,ty);
+
+  const {s,n,w,e} = tileBounds(tx,ty);
+  let osm = await cacheGet(s,w,n,e);
+  if (!osm) {
+    const query = '[out:json][timeout:30];\nway["highway"~"^('+ROAD_TYPES+')$"]["name"]('+s+','+w+','+n+','+e+');\nout geom;';
+    const MAX_RETRIES=4, BACKOFF=[2000,5000,10000,20000];
+    for (let attempt=0; attempt<MAX_RETRIES; attempt++) {
+      try {
+        const r = await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:query});
+        osm = await r.json();
+        await cacheSet(s,w,n,e,osm);
+        break;
+      } catch(err) {
+        if (attempt===MAX_RETRIES-1) {
+          showToast('Failed to load area.');
+          loadedTiles.delete(key); removeLoadingMarker(tx,ty); refreshFogBorder();
+          return;
+        }
+        const wait=BACKOFF[attempt];
+        showToast('Retrying in '+(wait/1000)+'s…');
+        await new Promise(r=>setTimeout(r,wait));
+      }
+    }
+  }
+
+  let newStreets = 0;
+  for (const el of osm.elements) {
+    if (!el.geometry || !el.tags?.name) continue;
+    const sk = normalize(el.tags.name);
+    if (!streetLayers[sk]) {
+      streetLayers[sk] = { layers:[], osmName:el.tags.name, state:'unknown' };
+      newStreets++;
+    }
+    const coords = el.geometry.map(p=>[p.lat,p.lon]);
+    const layer  = L.polyline(coords, {...COLORS.unknown, interactive:true});
+    streetLayers[sk].layers.push(layer);
+
+    // Apply existing state style
+    applyStyle(sk);
+
+    layer.on('mouseover', () => {
+      if (streetLayers[sk].state === 'unknown' && currentKey !== sk)
+        streetLayers[sk].layers.forEach(l=>l.setStyle(COLORS.hover));
+    });
+    layer.on('mouseout', () => {
+      if (streetLayers[sk].state === 'unknown' && currentKey !== sk)
+        streetLayers[sk].layers.forEach(l=>l.setStyle(COLORS.unknown));
+    });
+    layer.on('click', ev => { L.DomEvent.stop(ev); onStreetClick(sk); });
+    layer.addTo(map);
+  }
+
+  removeLoadingMarker(tx,ty);
+  document.getElementById('statTotal').textContent = Object.keys(streetLayers).length;
+
+  // Add newly loaded streets to queue if game is running
+  if (queue.length > 0 || currentKey) rebuildQueue(false);
+}
+
+function applyStyle(sk) {
+  const street = streetLayers[sk];
+  if (!street) return;
+  const state = street.state;
+  let style;
+  if (state==='correct') style = COLORS.correct;
+  else if (state==='wrong')   style = COLORS.wrong;
+  else if (state==='skipped') style = COLORS.skipped;
+  else if (state==='hint')    style = COLORS.hint;
+  else                        style = COLORS.unknown;
+  street.layers.forEach(l => l.setStyle(style));
+}
+
+// ═══════════════════════════════════════════════════════════
+// CITY LOAD
+// ═══════════════════════════════════════════════════════════
+async function loadCity() {
+  const cityRaw = document.getElementById('cityInput').value.trim();
+  if (!cityRaw) return;
+
+  setLoading(true, 'Geocoding…');
+  clearAll();
+
+  let geoData;
+  try {
+    const r = await fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(cityRaw)+'&limit=1&lang=en');
+    geoData = await r.json();
+  } catch(e) { showToast('Geocoding failed.'); setLoading(false); return; }
+
+  if (!geoData.features?.length) { showToast('City not found.'); setLoading(false); return; }
+
+  const feat = geoData.features[0];
+  const [lon, lat] = feat.geometry.coordinates;
+  const ext = feat.properties.extent;
+  let s,n,w,e;
+  if (ext) { [w,s,e,n]=ext; } else { const d=0.08; s=lat-d;n=lat+d;w=lon-d;e=lon+d; }
+  const maxDeg=0.38, clat=(s+n)/2, clon=(w+e)/2;
+  s=Math.max(s,clat-maxDeg); n=Math.min(n,clat+maxDeg);
+  w=Math.max(w,clon-maxDeg); e=Math.min(e,clon+maxDeg);
+
+  map.fitBounds([[s,w],[n,e]]);
+  setLoading(true,'Loading streets…');
+
+  await Promise.all(tilesForBbox(s,n,w,e).map(({tx,ty})=>loadTile(tx,ty)));
+
+  setLoading(false);
+  rebuildQueue(true);
+
+  const hint = document.getElementById('fogHint');
+  hint.classList.add('show');
+  setTimeout(()=>hint.classList.remove('show'), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════════════════
+function rebuildQueue(reset) {
+  // Collect all unanswered streets
+  const unanswered = Object.keys(streetLayers).filter(k => {
+    const s = streetLayers[k].state;
+    return s === 'unknown' || s === 'skipped';
+  });
+
+  if (reset) {
+    // Full shuffle
+    queue = shuffle(unanswered);
+    queueIndex = 0;
+    score = { correct:0, wrong:0 };
+    document.getElementById('statCorrect').textContent = 0;
+    document.getElementById('statWrong').textContent = 0;
+    document.getElementById('history').innerHTML = '';
+  } else {
+    // Add any newly loaded streets not yet in queue
+    const inQueue = new Set(queue);
+    const newOnes = unanswered.filter(k => !inQueue.has(k));
+    // Insert them randomly into the remaining portion of the queue
+    const remaining = queue.slice(queueIndex);
+    const combined  = shuffle([...remaining, ...newOnes]);
+    queue = [...queue.slice(0, queueIndex), ...combined];
+  }
+
+  nextQuestion();
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i=a.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function nextQuestion() {
+  // Clear hint marker
+  clearHint();
+  answered = false;
+
+  // Restore previous target to its answered/unknown style
+  if (currentKey) applyStyle(currentKey);
+  currentKey = null;
+
+  // Find next unanswered street
+  while (queueIndex < queue.length) {
+    const k = queue[queueIndex];
+    if (streetLayers[k] && (streetLayers[k].state === 'unknown' || streetLayers[k].state === 'skipped')) {
+      currentKey = k;
+      break;
+    }
+    queueIndex++;
+  }
+
+  if (!currentKey) {
+    // Queue exhausted
+    document.getElementById('targetName').textContent = '🎉 Done!';
+    document.getElementById('targetActions').innerHTML =
+      '<button class="action-btn primary" onclick="rebuildQueue(true)">Play again</button>';
+    document.getElementById('resultFlash').style.display = 'none';
+    return;
+  }
+
+  queueIndex++;
+
+  // Highlight target street
+  applyStyle(currentKey);
+
+  document.getElementById('targetName').textContent = streetLayers[currentKey].osmName;
+  document.getElementById('resultFlash').style.display = 'none';
+  document.getElementById('targetActions').innerHTML = `
+    <button class="action-btn primary" onclick="onSkip()">Skip →</button>
+    <button class="action-btn" onclick="onHint()">💡 Hint — show area</button>
+    <button class="action-btn" onclick="onReveal()">👁 Reveal on map</button>
+  `;
+}
+
+function onStreetClick(sk) {
+  if (!currentKey || answered) return;
+
+  if (sk === currentKey) {
+    // Correct!
+    answered = true;
+    streetLayers[sk].state = 'correct';
+    applyStyle(sk);
+    score.correct++;
+    document.getElementById('statCorrect').textContent = score.correct;
+    showResultFlash('correct', '✓ Correct!');
+    addHistory('correct', streetLayers[sk].osmName);
+    clearHint();
+    setTimeout(nextQuestion, 1000);
+  } else {
+    // Wrong — flash red briefly then restore
+    streetLayers[sk].layers.forEach(l => l.setStyle(COLORS.wrong));
+    setTimeout(() => applyStyle(sk), 600);
+    score.wrong++;
+    document.getElementById('statWrong').textContent = score.wrong;
+    showResultFlash('wrong', '✗ That\'s ' + streetLayers[sk].osmName);
+  }
+}
+
+function onSkip() {
+  if (!currentKey || answered) return;
+  answered = true;
+  streetLayers[currentKey].state = 'skipped';
+  applyStyle(currentKey);
+  addHistory('skipped', streetLayers[currentKey].osmName);
+  clearHint();
+  // Put it back at end of queue so it comes around again
+  queue.push(currentKey);
+  nextQuestion();
+}
+
+function onHint() {
+  if (!currentKey) return;
+  clearHint();
+  // Find centroid of all segments
+  const street = streetLayers[currentKey];
+  let latSum=0, lngSum=0, count=0;
+  for (const layer of street.layers) {
+    for (const pt of layer.getLatLngs()) {
+      latSum+=pt.lat; lngSum+=pt.lng; count++;
+    }
+  }
+  if (!count) return;
+  const centroid = L.latLng(latSum/count, lngSum/count);
+
+  // Draw a pulsing circle around the area (~400m radius)
+  hintMarker = L.circle(centroid, {
+    radius: 400, color:'#e8d5a3', weight:2,
+    fillColor:'#e8d5a3', fillOpacity:0.08, interactive:false,
+  }).addTo(map);
+
+  // Pan to show the hint without zooming in too much
+  map.panTo(centroid, { animate:true });
+  showResultFlash('hint', '💡 It\'s somewhere in the highlighted area');
+}
+
+function onReveal() {
+  if (!currentKey || answered) return;
+  answered = true;
+  const street = streetLayers[currentKey];
+  street.state = 'wrong'; // counts as revealed/wrong
+  applyStyle(currentKey);
+  score.wrong++;
+  document.getElementById('statWrong').textContent = score.wrong;
+
+  // Fly to the street
+  const bounds = L.featureGroup(street.layers).getBounds();
+  map.fitBounds(bounds, { padding:[40,40], maxZoom:16 });
+
+  addHistory('wrong', street.osmName);
+  clearHint();
+  showResultFlash('wrong', '👁 It\'s ' + street.osmName);
+  setTimeout(nextQuestion, 2000);
+}
+
+function clearHint() {
+  if (hintMarker) { map.removeLayer(hintMarker); hintMarker = null; }
+}
+
+function showResultFlash(type, msg) {
+  const el = document.getElementById('resultFlash');
+  el.className = 'result-flash ' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function addHistory(type, name) {
+  const hist = document.getElementById('history');
+  const icon = type==='correct' ? '✓' : type==='skipped' ? '→' : '✗';
+  const div = document.createElement('div');
+  div.className = 'history-item ' + type;
+  div.innerHTML = '<span class="hi-icon">'+icon+'</span><span>'+name+'</span>';
+  hist.insertBefore(div, hist.firstChild);
+}
+
+function onMapClick(ev) {
+  // Clicking the base map (not a street) while a question is active — ignore
+  // Street clicks are handled by layer click handlers
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function clearAll() {
+  for (const {layers} of Object.values(streetLayers)) layers.forEach(l=>map.removeLayer(l));
+  for (const l of Object.values(fogLayers)) map.removeLayer(l);
+  for (const l of Object.values(loadingTiles)) map.removeLayer(l);
+  clearHint();
+  streetLayers={}; loadedTiles=new Set(); fogLayers={}; loadingTiles={};
+  queue=[]; queueIndex=0; currentKey=null; answered=false;
+  score={correct:0,wrong:0};
+  document.getElementById('statTotal').textContent='—';
+  document.getElementById('statCorrect').textContent='0';
+  document.getElementById('statWrong').textContent='0';
+  document.getElementById('targetName').textContent='—';
+  document.getElementById('targetActions').innerHTML='<div class="no-streets">Load a city to start playing.</div>';
+  document.getElementById('resultFlash').style.display='none';
+  document.getElementById('history').innerHTML='';
+}
+
+function setLoading(show,text='') {
+  document.getElementById('loading').classList.toggle('hidden',!show);
+  if (text) document.getElementById('loadingText').textContent=text;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════
+if (navigator.storage?.persist) navigator.storage.persist();
+</script>
+</body>
+</html>
